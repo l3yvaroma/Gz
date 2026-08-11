@@ -67,10 +67,10 @@ let iColor = 0;
 let color = colores[0];
 let angulo = 0;
 let origen = { x: 0, y: 0 };
-let guia = { x: 0, y: 0 };        // punto medio de guía
+let guia = { x: 0, y: 0 };
 let inicializado = false;
 let arrastrando = false;
-let modoArrastre = 'origen';      // 'origen' o 'guia'
+let modoArrastre = 'origen';
 let camaraTrasera = true;
 let stream = null;
 let ancho = 0, alto = 0;
@@ -108,6 +108,38 @@ function ajustar() {
   dibujar();
 }
 
+// Dibuja una flecha con la forma del cursor clásico de Windows.
+// La punta de la flecha queda exactamente en (x, y) y apunta
+// en la dirección indicada por anguloGrados.
+function dibujarFlechaWindows(x, y, anguloGrados, escala) {
+  // Polígono del cursor clásico: la punta está en (0,0)
+  const puntos = [
+    [0, 0], [0, 16], [4.6, 12.7], [7.3, 18.7],
+    [9.7, 17.6], [6.9, 11.8], [12.5, 11.8]
+  ];
+  const rad = anguloGrados * Math.PI / 180;
+  ctx.save();
+  ctx.translate(x, y);
+  // El cursor original apunta hacia arriba-izquierda;
+  // con esta rotación la punta apunta en la dirección de la línea
+  ctx.rotate(rad + 3 * Math.PI / 4);
+  ctx.scale(escala, escala);
+  ctx.beginPath();
+  ctx.moveTo(puntos[0][0], puntos[0][1]);
+  for (let i = 1; i < puntos.length; i++) {
+    ctx.lineTo(puntos[i][0], puntos[i][1]);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 1.2;
+  ctx.shadowColor = 'rgba(0,0,0,.8)';
+  ctx.shadowBlur = 4;
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
 function dibujar() {
   ctx.clearRect(0, 0, ancho, alto);
   const rad = angulo * Math.PI / 180;
@@ -129,7 +161,10 @@ function dibujar() {
   ctx.arc(origen.x, origen.y, 24, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Punto medio de guía (rojo): punto central, anillo y marcas
+  // Flecha estilo Windows en el medio de la línea
+  dibujarFlechaWindows(origen.x, origen.y, angulo, 2.2);
+
+  // Punto de guía (rojo)
   ctx.strokeStyle = '#ff4444';
   ctx.fillStyle = '#ff4444';
   ctx.beginPath();
@@ -163,7 +198,6 @@ function mover(e) {
 
 canvas.addEventListener('pointerdown', e => {
   arrastrando = true;
-  // Si tocas cerca del punto de guía, se mueve el punto; si no, la línea
   const distanciaGuia = Math.hypot(e.clientX - guia.x, e.clientY - guia.y);
   modoArrastre = distanciaGuia < 40 ? 'guia' : 'origen';
   mover(e);
