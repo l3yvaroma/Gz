@@ -30,6 +30,7 @@
   #controles {
     position: fixed; bottom: 12px; left: 0; right: 0;
     display: flex; justify-content: center; gap: 8px;
+    flex-wrap: wrap; padding: 0 8px;
     z-index: 10;
   }
   button {
@@ -53,6 +54,7 @@
   <button id="mas">+ Ángulo</button>
   <button id="color">Color</button>
   <button id="camara">Cambiar cámara</button>
+  <button id="centrarPunto">Centrar punto</button>
 </div>
 <script>
 const video = document.getElementById('video');
@@ -65,7 +67,10 @@ let iColor = 0;
 let color = colores[0];
 let angulo = 0;
 let origen = { x: 0, y: 0 };
+let guia = { x: 0, y: 0 };        // punto medio de guía
+let inicializado = false;
 let arrastrando = false;
+let modoArrastre = 'origen';      // 'origen' o 'guia'
 let camaraTrasera = true;
 let stream = null;
 let ancho = 0, alto = 0;
@@ -95,8 +100,10 @@ function ajustar() {
   canvas.width = ancho * dpr;
   canvas.height = alto * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  if (!origen.x && !origen.y) {
+  if (!inicializado) {
     origen = { x: ancho / 2, y: alto / 2 };
+    guia = { x: ancho / 2, y: alto / 2 };
+    inicializado = true;
   }
   dibujar();
 }
@@ -106,28 +113,61 @@ function dibujar() {
   const rad = angulo * Math.PI / 180;
   const largo = Math.max(ancho, alto);
 
-  ctx.strokeStyle = color;
   ctx.lineWidth = 2;
   ctx.shadowColor = 'rgba(0,0,0,.8)';
   ctx.shadowBlur = 4;
 
+  // Línea principal
+  ctx.strokeStyle = color;
   ctx.beginPath();
   ctx.moveTo(origen.x - Math.cos(rad) * largo, origen.y - Math.sin(rad) * largo);
   ctx.lineTo(origen.x + Math.cos(rad) * largo, origen.y + Math.sin(rad) * largo);
   ctx.stroke();
 
+  // Círculo del origen de la línea
   ctx.beginPath();
   ctx.arc(origen.x, origen.y, 24, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Punto medio de guía (rojo): punto central, anillo y marcas
+  ctx.strokeStyle = '#ff4444';
+  ctx.fillStyle = '#ff4444';
+  ctx.beginPath();
+  ctx.arc(guia.x, guia.y, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(guia.x, guia.y, 14, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(guia.x - 22, guia.y);
+  ctx.lineTo(guia.x - 8, guia.y);
+  ctx.moveTo(guia.x + 8, guia.y);
+  ctx.lineTo(guia.x + 22, guia.y);
+  ctx.moveTo(guia.x, guia.y - 22);
+  ctx.lineTo(guia.x, guia.y - 8);
+  ctx.moveTo(guia.x, guia.y + 8);
+  ctx.lineTo(guia.x, guia.y + 22);
   ctx.stroke();
 }
 
 function mover(e) {
-  origen.x = e.clientX;
-  origen.y = e.clientY;
+  if (modoArrastre === 'guia') {
+    guia.x = e.clientX;
+    guia.y = e.clientY;
+  } else {
+    origen.x = e.clientX;
+    origen.y = e.clientY;
+  }
   dibujar();
 }
 
-canvas.addEventListener('pointerdown', e => { arrastrando = true; mover(e); });
+canvas.addEventListener('pointerdown', e => {
+  arrastrando = true;
+  // Si tocas cerca del punto de guía, se mueve el punto; si no, la línea
+  const distanciaGuia = Math.hypot(e.clientX - guia.x, e.clientY - guia.y);
+  modoArrastre = distanciaGuia < 40 ? 'guia' : 'origen';
+  mover(e);
+});
 window.addEventListener('pointermove', e => { if (arrastrando) mover(e); });
 window.addEventListener('pointerup', () => { arrastrando = false; });
 
@@ -141,6 +181,10 @@ document.getElementById('color').addEventListener('click', () => {
 document.getElementById('camara').addEventListener('click', () => {
   camaraTrasera = !camaraTrasera;
   iniciarCamara();
+});
+document.getElementById('centrarPunto').addEventListener('click', () => {
+  guia = { x: ancho / 2, y: alto / 2 };
+  dibujar();
 });
 
 window.addEventListener('resize', ajustar);
