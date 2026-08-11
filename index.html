@@ -50,6 +50,7 @@
 <canvas id="lienzo"></canvas>
 <div id="aviso">Permite el acceso a la cámara cuando lo pida</div>
 <div id="controles">
+  <button id="lineas">Líneas: 30°</button>
   <button id="color">Color</button>
   <button id="camara">Cambiar cámara</button>
 </div>
@@ -69,6 +70,12 @@ let arrastrando = false;
 let camaraTrasera = true;
 let stream = null;
 let ancho = 0, alto = 0;
+
+// Abanico de lineas auxiliares
+const intervalos = [30, 15, 10, 45, 0]; // separacion en grados; 0 = sin abanico
+let iIntervalo = 0;
+let intervalo = intervalos[iIntervalo];
+const OPACIDAD_ABANICO = 0.25; // opacidad de las lineas auxiliares (0 a 1)
 
 async function iniciarCamara() {
   if (stream) stream.getTracks().forEach(pista => pista.stop());
@@ -102,16 +109,11 @@ function ajustar() {
   dibujar();
 }
 
-// Dibuja la flecha estilo cursor de Windows con la punta en (x, y),
-// apuntando en la direccion de anguloGrados.
 function dibujarFlechaWindows(x, y, anguloGrados, escala) {
   const puntos = [
     [0, 0], [0, 16], [4.6, 12.7], [7.3, 18.7],
     [9.7, 17.6], [6.9, 11.8], [12.5, 11.8]
   ];
-
-  // La punta esta en puntos[0]. Calculamos hacia donde apunta naturalmente
-  // usando la bisectriz de las dos aristas que salen de la punta, y la invertimos.
   const a1 = Math.atan2(puntos[1][1] - puntos[0][1], puntos[1][0] - puntos[0][0]);
   const ult = puntos[puntos.length - 1];
   const a2 = Math.atan2(ult[1] - puntos[0][1], ult[0] - puntos[0][0]);
@@ -144,18 +146,34 @@ function dibujar() {
   const rad = angulo * Math.PI / 180;
   const largo = Math.max(ancho, alto);
 
+  // Abanico de lineas auxiliares con opacidad (detras de la principal)
+  if (intervalo > 0) {
+    ctx.save();
+    ctx.globalAlpha = OPACIDAD_ABANICO;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.shadowBlur = 0;
+    for (let a = 0; a < 180; a += intervalo) {
+      const r = a * Math.PI / 180;
+      ctx.beginPath();
+      ctx.moveTo(origen.x - Math.cos(r) * largo, origen.y - Math.sin(r) * largo);
+      ctx.lineTo(origen.x + Math.cos(r) * largo, origen.y + Math.sin(r) * largo);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Linea principal
   ctx.lineWidth = 2;
   ctx.shadowColor = 'rgba(0,0,0,.8)';
   ctx.shadowBlur = 4;
-
-  // Linea principal que pasa por el centro
   ctx.strokeStyle = color;
   ctx.beginPath();
   ctx.moveTo(origen.x - Math.cos(rad) * largo, origen.y - Math.sin(rad) * largo);
   ctx.lineTo(origen.x + Math.cos(rad) * largo, origen.y + Math.sin(rad) * largo);
   ctx.stroke();
 
-  // Flecha de Windows en el centro, apuntando en el sentido de la linea
+  // Flecha de Windows en el centro
   dibujarFlechaWindows(origen.x, origen.y, angulo, 2.2);
 }
 
@@ -163,7 +181,7 @@ function actualizarAngulo(clientX, clientY) {
   const dx = clientX - origen.x;
   const dy = clientY - origen.y;
   const dist = Math.hypot(dx, dy);
-  if (dist < 10) return; // zona muerta cerca del centro para evitar saltos
+  if (dist < 10) return;
   angulo = Math.atan2(dy, dx) * 180 / Math.PI;
   dibujar();
 }
@@ -177,6 +195,14 @@ window.addEventListener('pointermove', e => {
 });
 window.addEventListener('pointerup', () => { arrastrando = false; });
 window.addEventListener('pointercancel', () => { arrastrando = false; });
+
+const botonLineas = document.getElementById('lineas');
+botonLineas.addEventListener('click', () => {
+  iIntervalo = (iIntervalo + 1) % intervalos.length;
+  intervalo = intervalos[iIntervalo];
+  botonLineas.textContent = intervalo === 0 ? 'Líneas: no' : 'Líneas: ' + intervalo + '°';
+  dibujar();
+});
 
 document.getElementById('color').addEventListener('click', () => {
   iColor = (iColor + 1) % colores.length;
