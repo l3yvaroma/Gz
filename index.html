@@ -50,11 +50,8 @@
 <canvas id="lienzo"></canvas>
 <div id="aviso">Permite el acceso a la cámara cuando lo pida</div>
 <div id="controles">
-  <button id="menos">− Ángulo</button>
-  <button id="mas">+ Ángulo</button>
   <button id="color">Color</button>
   <button id="camara">Cambiar cámara</button>
-  <button id="centrarPunto">Centrar punto</button>
 </div>
 <script>
 const video = document.getElementById('video');
@@ -67,10 +64,8 @@ let iColor = 0;
 let color = colores[0];
 let angulo = 0;
 let origen = { x: 0, y: 0 };
-let guia = { x: 0, y: 0 };
 let inicializado = false;
 let arrastrando = false;
-let modoArrastre = 'origen';
 let camaraTrasera = true;
 let stream = null;
 let ancho = 0, alto = 0;
@@ -102,27 +97,31 @@ function ajustar() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (!inicializado) {
     origen = { x: ancho / 2, y: alto / 2 };
-    guia = { x: ancho / 2, y: alto / 2 };
     inicializado = true;
   }
   dibujar();
 }
 
-// Dibuja una flecha con la forma del cursor clásico de Windows.
-// La punta de la flecha queda exactamente en (x, y) y apunta
-// en la dirección indicada por anguloGrados.
+// Dibuja la flecha estilo cursor de Windows con la punta en (x, y),
+// apuntando en la direccion de anguloGrados.
 function dibujarFlechaWindows(x, y, anguloGrados, escala) {
-  // Polígono del cursor clásico: la punta está en (0,0)
   const puntos = [
     [0, 0], [0, 16], [4.6, 12.7], [7.3, 18.7],
     [9.7, 17.6], [6.9, 11.8], [12.5, 11.8]
   ];
+
+  // La punta esta en puntos[0]. Calculamos hacia donde apunta naturalmente
+  // usando la bisectriz de las dos aristas que salen de la punta, y la invertimos.
+  const a1 = Math.atan2(puntos[1][1] - puntos[0][1], puntos[1][0] - puntos[0][0]);
+  const ult = puntos[puntos.length - 1];
+  const a2 = Math.atan2(ult[1] - puntos[0][1], ult[0] - puntos[0][0]);
+  const haciaCuerpo = (a1 + a2) / 2;
+  const anguloNatural = haciaCuerpo + Math.PI;
+
   const rad = anguloGrados * Math.PI / 180;
   ctx.save();
   ctx.translate(x, y);
-  // El cursor original apunta hacia arriba-izquierda;
-  // con esta rotación la punta apunta en la dirección de la línea
-  ctx.rotate(rad + 3 * Math.PI / 4);
+  ctx.rotate(rad - anguloNatural);
   ctx.scale(escala, escala);
   ctx.beginPath();
   ctx.moveTo(puntos[0][0], puntos[0][1]);
@@ -149,64 +148,36 @@ function dibujar() {
   ctx.shadowColor = 'rgba(0,0,0,.8)';
   ctx.shadowBlur = 4;
 
-  // Línea principal
+  // Linea principal que pasa por el centro
   ctx.strokeStyle = color;
   ctx.beginPath();
   ctx.moveTo(origen.x - Math.cos(rad) * largo, origen.y - Math.sin(rad) * largo);
   ctx.lineTo(origen.x + Math.cos(rad) * largo, origen.y + Math.sin(rad) * largo);
   ctx.stroke();
 
-  // Círculo del origen de la línea
-  ctx.beginPath();
-  ctx.arc(origen.x, origen.y, 24, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Flecha estilo Windows en el medio de la línea
+  // Flecha de Windows en el centro, apuntando en el sentido de la linea
   dibujarFlechaWindows(origen.x, origen.y, angulo, 2.2);
-
-  // Punto de guía (rojo)
-  ctx.strokeStyle = '#ff4444';
-  ctx.fillStyle = '#ff4444';
-  ctx.beginPath();
-  ctx.arc(guia.x, guia.y, 5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(guia.x, guia.y, 14, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(guia.x - 22, guia.y);
-  ctx.lineTo(guia.x - 8, guia.y);
-  ctx.moveTo(guia.x + 8, guia.y);
-  ctx.lineTo(guia.x + 22, guia.y);
-  ctx.moveTo(guia.x, guia.y - 22);
-  ctx.lineTo(guia.x, guia.y - 8);
-  ctx.moveTo(guia.x, guia.y + 8);
-  ctx.lineTo(guia.x, guia.y + 22);
-  ctx.stroke();
 }
 
-function mover(e) {
-  if (modoArrastre === 'guia') {
-    guia.x = e.clientX;
-    guia.y = e.clientY;
-  } else {
-    origen.x = e.clientX;
-    origen.y = e.clientY;
-  }
+function actualizarAngulo(clientX, clientY) {
+  const dx = clientX - origen.x;
+  const dy = clientY - origen.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 10) return; // zona muerta cerca del centro para evitar saltos
+  angulo = Math.atan2(dy, dx) * 180 / Math.PI;
   dibujar();
 }
 
 canvas.addEventListener('pointerdown', e => {
   arrastrando = true;
-  const distanciaGuia = Math.hypot(e.clientX - guia.x, e.clientY - guia.y);
-  modoArrastre = distanciaGuia < 40 ? 'guia' : 'origen';
-  mover(e);
+  actualizarAngulo(e.clientX, e.clientY);
 });
-window.addEventListener('pointermove', e => { if (arrastrando) mover(e); });
+window.addEventListener('pointermove', e => {
+  if (arrastrando) actualizarAngulo(e.clientX, e.clientY);
+});
 window.addEventListener('pointerup', () => { arrastrando = false; });
+window.addEventListener('pointercancel', () => { arrastrando = false; });
 
-document.getElementById('mas').addEventListener('click', () => { angulo += 1; dibujar(); });
-document.getElementById('menos').addEventListener('click', () => { angulo -= 1; dibujar(); });
 document.getElementById('color').addEventListener('click', () => {
   iColor = (iColor + 1) % colores.length;
   color = colores[iColor];
@@ -215,10 +186,6 @@ document.getElementById('color').addEventListener('click', () => {
 document.getElementById('camara').addEventListener('click', () => {
   camaraTrasera = !camaraTrasera;
   iniciarCamara();
-});
-document.getElementById('centrarPunto').addEventListener('click', () => {
-  guia = { x: ancho / 2, y: alto / 2 };
-  dibujar();
 });
 
 window.addEventListener('resize', ajustar);
